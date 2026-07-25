@@ -18,6 +18,7 @@ import { useWorkoutStore } from '@/store/workoutStore';
 import { Exercise, TrackingType, WorkoutSet, SetMetrics } from '@/types/database';
 import ExerciseInfoModal from './ExerciseInfoModal';
 import Svg, { Path, G, Rect } from 'react-native-svg';
+import { Ionicons, Feather, MaterialCommunityIcons } from '@expo/vector-icons';
 
 const screenWidth = Dimensions.get('window').width;
 const rowWidth = screenWidth - 64; // Ajustado para padding horizontal de scrollContent (16) y blockCard (16)
@@ -67,6 +68,29 @@ export default function ActiveWorkoutSheet() {
   // Estados para menú de bloque (Reordenar, reemplazar, superset)
   const [activeBlockMenuId, setActiveBlockMenuId] = useState<string | null>(null);
   const [blockMenuModalVisible, setBlockMenuModalVisible] = useState(false);
+
+  // Estados para confirmación personalizada (para no depender de Alert.alert)
+  const [confirmModalVisible, setConfirmModalVisible] = useState(false);
+  const [confirmModalData, setConfirmModalData] = useState<{
+    title: string;
+    message: string;
+    cancelText?: string;
+    confirmText?: string;
+    confirmStyle?: 'default' | 'destructive';
+    onConfirm: () => void;
+  } | null>(null);
+
+  const showConfirm = (data: {
+    title: string;
+    message: string;
+    cancelText?: string;
+    confirmText?: string;
+    confirmStyle?: 'default' | 'destructive';
+    onConfirm: () => void;
+  }) => {
+    setConfirmModalData(data);
+    setConfirmModalVisible(true);
+  };
 
   // Estados para selección de tipo de serie
   const [selectedSetForTypeChange, setSelectedSetForTypeChange] = useState<{ blockId: string; setId: string; currentType: string } | null>(null);
@@ -131,23 +155,28 @@ export default function ActiveWorkoutSheet() {
     if (success) {
       setRestSeconds(null);
     } else {
-      Alert.alert('Error', 'Hubo un problema al guardar en Supabase.');
+      showConfirm({
+        title: 'Error',
+        message: 'Hubo un problema al guardar en Supabase.',
+        confirmText: 'Aceptar',
+        onConfirm: () => {}
+      });
     }
   };
 
   const handleFinish = async () => {
     if (activeBlocks.length === 0) {
-      Alert.alert(
-        'Entrenamiento vacío',
-        'No has añadido ningún ejercicio. ¿Deseas cancelarlo?',
-        [
-          { text: 'Seguir editando', style: 'cancel' },
-          { text: 'Cancelar entrenamiento', style: 'destructive', onPress: () => {
-            cancelWorkout();
-            setRestSeconds(null);
-          }}
-        ]
-      );
+      showConfirm({
+        title: 'Entrenamiento vacío',
+        message: 'No has añadido ningún ejercicio. ¿Deseas cancelarlo?',
+        cancelText: 'Seguir editando',
+        confirmText: 'Cancelar entrenamiento',
+        confirmStyle: 'destructive',
+        onConfirm: () => {
+          cancelWorkout();
+          setRestSeconds(null);
+        }
+      });
       return;
     }
 
@@ -157,14 +186,14 @@ export default function ActiveWorkoutSheet() {
     const durationMinutes = (end - start) / 60000;
 
     if (durationMinutes < 30) {
-      Alert.alert(
-        '¡Entrenamiento muy corto!',
-        'Esta sesión duró muy poco. ¿Deseas modificar la hora de finalización para corregirla?',
-        [
-          { text: 'Sí, corregir hora', style: 'cancel' },
-          { text: 'Guardar de todos modos', style: 'default', onPress: saveWorkoutDirectly }
-        ]
-      );
+      showConfirm({
+        title: '¡Entrenamiento muy corto!',
+        message: 'Esta sesión duró muy poco. ¿Deseas modificar la hora de finalización para corregirla?',
+        cancelText: 'Corregir hora',
+        confirmText: 'Guardar de todos modos',
+        confirmStyle: 'default',
+        onConfirm: saveWorkoutDirectly
+      });
     } else {
       await saveWorkoutDirectly();
     }
@@ -176,17 +205,17 @@ export default function ActiveWorkoutSheet() {
       ? '¿Seguro que deseas descartar las modificaciones hechas a esta sesión?' 
       : '¿Seguro que deseas cancelar este entrenamiento? Se borrarán los datos de esta sesión.';
       
-    Alert.alert(
+    showConfirm({
       title,
       message,
-      [
-        { text: 'Continuar', style: 'cancel' },
-        { text: 'Sí, salir', style: 'destructive', onPress: () => {
-          cancelWorkout();
-          setRestSeconds(null);
-        }}
-      ]
-    );
+      cancelText: 'Continuar',
+      confirmText: 'Sí, salir',
+      confirmStyle: 'destructive',
+      onConfirm: () => {
+        cancelWorkout();
+        setRestSeconds(null);
+      }
+    });
   };
 
   const handleManualRestPress = () => {
@@ -539,7 +568,7 @@ export default function ActiveWorkoutSheet() {
                   Alert.alert('Temporizador', 'El cronómetro de la sesión sigue sumando tiempo en la barra inferior.');
                 }}
               >
-                <Text style={styles.headerPauseSymbol}>⏱️</Text>
+                <Ionicons name="stopwatch-outline" size={20} color="#FFFFFF" />
               </TouchableOpacity>
 
               <TouchableOpacity style={styles.headerFinishPill} onPress={handleFinish} disabled={loading}>
@@ -574,7 +603,7 @@ export default function ActiveWorkoutSheet() {
               onPress={() => setHeatmapModalVisible(true)}
             >
               <View style={styles.miniHeatmapGraphics}>
-                <Text style={styles.miniHeatmapEmoji}>🧍🧍</Text>
+                <Ionicons name="body-outline" size={20} color="#0082FF" />
               </View>
             </TouchableOpacity>
           </View>
@@ -696,7 +725,7 @@ export default function ActiveWorkoutSheet() {
                         styles.exerciseRoundIcon,
                         block.superset_id ? { backgroundColor: '#8A2BE2' } : null
                       ]}>
-                        <Text style={styles.exerciseRoundIconEmoji}>💪</Text>
+                        <MaterialCommunityIcons name="dumbbell" size={18} color="#FFFFFF" />
                       </View>
                       
                       <TouchableOpacity 
@@ -717,7 +746,7 @@ export default function ActiveWorkoutSheet() {
                         }}
                         style={styles.moreOptionsBtn}
                       >
-                        <Text style={styles.moreOptionsText}>•••</Text>
+                        <Feather name="more-horizontal" size={20} color="#8E8E93" />
                       </TouchableOpacity>
                     </View>
 
@@ -745,11 +774,14 @@ export default function ActiveWorkoutSheet() {
                       {lastCompletedBlockId === block.id && restSeconds !== null && restSeconds > 0 && (
                         <View style={[styles.blockRestRowFill, { width: `${(restSeconds > 240 ? 1 : restSeconds / 240) * 100}%` }]} />
                       )}
-                      <Text style={[styles.blockRestLabel, { zIndex: 2 }]}>
-                        {lastCompletedBlockId === block.id && restSeconds !== null && restSeconds > 0
-                          ? `⏱️ Rest: ${formatTime(restSeconds)}`
-                          : `⏱️ Rest ${formatRestDuration(exerciseRest)}`}
-                      </Text>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, zIndex: 2 }}>
+                        <Ionicons name="timer-outline" size={14} color="#8E8E93" />
+                        <Text style={styles.blockRestLabel}>
+                          {lastCompletedBlockId === block.id && restSeconds !== null && restSeconds > 0
+                            ? `Rest: ${formatTime(restSeconds)}`
+                            : `Rest ${formatRestDuration(exerciseRest)}`}
+                        </Text>
+                      </View>
                       <Text style={[styles.blockRestDone, { zIndex: 2 }]}>{completedSetsInBlock}/{block.sets.length} done</Text>
                     </TouchableOpacity>
 
@@ -999,34 +1031,39 @@ export default function ActiveWorkoutSheet() {
                 <Text style={styles.popoverTitle}>Exercise Actions</Text>
                 
                 {/* Reorder Exercises option */}
-                <TouchableOpacity 
-                  style={styles.typeOptionCard}
-                  onPress={() => {
-                    setBlockMenuModalVisible(false);
-                    if (!activeBlockMenuId) return;
-                    const blockIdx = activeBlocks.findIndex(b => b.id === activeBlockMenuId);
-                    Alert.alert(
-                      'Reorder Exercise',
-                      'Move this exercise up or down in the workout sequence.',
-                      [
-                        { text: 'Move Up', onPress: () => {
-                          if (blockIdx > 0) reorderExercises(blockIdx, blockIdx - 1);
-                        }},
-                        { text: 'Move Down', onPress: () => {
-                          if (blockIdx < activeBlocks.length - 1) reorderExercises(blockIdx, blockIdx + 1);
-                        }},
-                        { text: 'Cancel', style: 'cancel' }
-                      ]
-                    );
-                    setActiveBlockMenuId(null);
-                  }}
-                >
-                  <Text style={{ fontSize: 18 }}>↕️</Text>
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.typeOptionName}>Reorder Exercises</Text>
-                    <Text style={styles.typeOptionDesc}>Shift this exercise position in the active routine</Text>
-                  </View>
-                </TouchableOpacity>
+                {(() => {
+                  if (!activeBlockMenuId) return null;
+                  const blockIdx = activeBlocks.findIndex(b => b.id === activeBlockMenuId);
+                  return (
+                    <View style={styles.reorderActionsRow}>
+                      <TouchableOpacity 
+                        style={[styles.reorderPill, blockIdx === 0 && styles.reorderPillDisabled]}
+                        disabled={blockIdx === 0}
+                        onPress={() => {
+                          reorderExercises(blockIdx, blockIdx - 1);
+                          setBlockMenuModalVisible(false);
+                          setActiveBlockMenuId(null);
+                        }}
+                      >
+                        <Ionicons name="arrow-up" size={16} color={blockIdx === 0 ? '#48484A' : '#0082FF'} />
+                        <Text style={[styles.reorderText, blockIdx === 0 && { color: '#48484A' }]}>Move Up</Text>
+                      </TouchableOpacity>
+
+                      <TouchableOpacity 
+                        style={[styles.reorderPill, blockIdx === activeBlocks.length - 1 && styles.reorderPillDisabled]}
+                        disabled={blockIdx === activeBlocks.length - 1}
+                        onPress={() => {
+                          reorderExercises(blockIdx, blockIdx + 1);
+                          setBlockMenuModalVisible(false);
+                          setActiveBlockMenuId(null);
+                        }}
+                      >
+                        <Ionicons name="arrow-down" size={16} color={blockIdx === activeBlocks.length - 1 ? '#48484A' : '#0082FF'} />
+                        <Text style={[styles.reorderText, blockIdx === activeBlocks.length - 1 && { color: '#48484A' }]}>Move Down</Text>
+                      </TouchableOpacity>
+                    </View>
+                  );
+                })()}
 
                 {/* Replace Exercise option */}
                 <TouchableOpacity 
@@ -1036,7 +1073,7 @@ export default function ActiveWorkoutSheet() {
                     setExerciseModalVisible(true);
                   }}
                 >
-                  <Text style={{ fontSize: 18 }}>🔄</Text>
+                  <Ionicons name="refresh" size={20} color="#0082FF" />
                   <View style={{ flex: 1 }}>
                     <Text style={styles.typeOptionName}>Replace Exercise</Text>
                     <Text style={styles.typeOptionDesc}>Swap this exercise keeping the sets layout</Text>
@@ -1057,24 +1094,39 @@ export default function ActiveWorkoutSheet() {
                         
                         if (isSuperset) {
                           toggleBlockSuperset(activeBlockMenuId, null);
-                          Alert.alert('Superset Removed', 'This exercise was unlinked from the superset.');
+                          showConfirm({
+                            title: 'Superset eliminado',
+                            message: 'Este ejercicio se ha desvinculado de la superserie.',
+                            confirmText: 'Aceptar',
+                            onConfirm: () => {}
+                          });
                         } else {
                           const otherBlocks = activeBlocks.filter(b => b.id !== activeBlockMenuId);
                           if (otherBlocks.length === 0) {
-                            Alert.alert('Cannot create Superset', 'You need at least 2 exercises to create a superset.');
+                            showConfirm({
+                              title: 'No se puede crear Superset',
+                              message: 'Necesitas al menos 2 ejercicios en tu rutina para crear una superserie.',
+                              confirmText: 'Aceptar',
+                              onConfirm: () => {}
+                            });
                           } else {
                             const currentIdx = activeBlocks.findIndex(b => b.id === activeBlockMenuId);
                             const partnerBlock = activeBlocks[currentIdx + 1] || activeBlocks[currentIdx - 1];
                             if (partnerBlock) {
                               toggleBlockSuperset(activeBlockMenuId, partnerBlock.id);
-                              Alert.alert('Superset Created', `Grouped with ${partnerBlock.exercise.name}`);
+                              showConfirm({
+                                title: 'Superset creado',
+                                message: `Agrupado con ${partnerBlock.exercise.name}`,
+                                confirmText: 'Aceptar',
+                                onConfirm: () => {}
+                              });
                             }
                           }
                         }
                         setActiveBlockMenuId(null);
                       }}
                     >
-                      <Text style={{ fontSize: 18 }}>🔗</Text>
+                      <Feather name="link" size={20} color="#0082FF" />
                       <View style={{ flex: 1 }}>
                         <Text style={styles.typeOptionName}>
                           {isSuperset ? 'Remove from Superset' : 'Add to Superset'}
@@ -1098,7 +1150,7 @@ export default function ActiveWorkoutSheet() {
                     setActiveBlockMenuId(null);
                   }}
                 >
-                  <Text style={{ fontSize: 18 }}>🗑️</Text>
+                  <Feather name="trash-2" size={20} color="#FF453A" />
                   <View style={{ flex: 1 }}>
                     <Text style={[styles.typeOptionName, { color: '#FF453A' }]}>Remove Exercise</Text>
                     <Text style={styles.typeOptionDesc}>Delete this exercise block from the active session</Text>
@@ -1116,6 +1168,49 @@ export default function ActiveWorkoutSheet() {
                 </TouchableOpacity>
               </View>
             </TouchableOpacity>
+          </Modal>
+
+          {/* MODAL DE CONFIRMACIÓN PERSONALIZADO (Nativo/Responsivo) */}
+          <Modal
+            animationType="fade"
+            transparent={true}
+            visible={confirmModalVisible}
+            onRequestClose={() => setConfirmModalVisible(false)}
+          >
+            <View style={styles.confirmOverlay}>
+              <View style={styles.confirmBox}>
+                <Text style={styles.confirmTitle}>{confirmModalData?.title}</Text>
+                <Text style={styles.confirmMessage}>{confirmModalData?.message}</Text>
+                
+                <View style={styles.confirmActionsRow}>
+                  <TouchableOpacity 
+                    style={styles.confirmCancelBtn} 
+                    onPress={() => setConfirmModalVisible(false)}
+                  >
+                    <Text style={styles.confirmCancelText}>
+                      {confirmModalData?.cancelText || 'Cancelar'}
+                    </Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity 
+                    style={[
+                      styles.confirmOkBtn, 
+                      confirmModalData?.confirmStyle === 'destructive' && styles.confirmOkBtnDestructive
+                    ]} 
+                    onPress={() => {
+                      setConfirmModalVisible(false);
+                      if (confirmModalData?.onConfirm) {
+                        confirmModalData.onConfirm();
+                      }
+                    }}
+                  >
+                    <Text style={styles.confirmOkText}>
+                      {confirmModalData?.confirmText || 'Confirmar'}
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            </View>
           </Modal>
 
           {/* MODAL: CONFIGURAR TIEMPO DE DESCANSO (Rest Modal) */}
@@ -2518,5 +2613,100 @@ const styles = StyleSheet.create({
   },
   scrollView: {
     flex: 1,
+  },
+  // Confirm Modal styles
+  confirmOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.75)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 24,
+  },
+  confirmBox: {
+    backgroundColor: '#0C0C0E',
+    borderColor: '#1C1C1E',
+    borderWidth: 1,
+    borderRadius: 20,
+    padding: 20,
+    width: '100%',
+    maxWidth: 340,
+    alignItems: 'center',
+    gap: 12,
+  },
+  confirmTitle: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '900',
+    textAlign: 'center',
+  },
+  confirmMessage: {
+    color: '#8E8E93',
+    fontSize: 13,
+    textAlign: 'center',
+    lineHeight: 18,
+    marginBottom: 8,
+  },
+  confirmActionsRow: {
+    flexDirection: 'row',
+    gap: 10,
+    width: '100%',
+  },
+  confirmCancelBtn: {
+    flex: 1,
+    height: 44,
+    borderRadius: 12,
+    backgroundColor: '#121214',
+    borderWidth: 0.5,
+    borderColor: '#1C1C1E',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  confirmCancelText: {
+    color: '#FFFFFF',
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  confirmOkBtn: {
+    flex: 1,
+    height: 44,
+    borderRadius: 12,
+    backgroundColor: '#0082FF',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  confirmOkBtnDestructive: {
+    backgroundColor: '#FF453A',
+  },
+  confirmOkText: {
+    color: '#FFFFFF',
+    fontSize: 13,
+    fontWeight: '800',
+  },
+  // Reorder row inside popover
+  reorderActionsRow: {
+    flexDirection: 'row',
+    gap: 10,
+    width: '100%',
+    marginBottom: 10,
+  },
+  reorderPill: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    backgroundColor: '#121214',
+    borderWidth: 0.5,
+    borderColor: '#1C1C1E',
+    height: 44,
+    borderRadius: 12,
+  },
+  reorderPillDisabled: {
+    opacity: 0.4,
+  },
+  reorderText: {
+    color: '#0082FF',
+    fontSize: 13,
+    fontWeight: '700',
   },
 });

@@ -16,6 +16,7 @@ import {
 import { useWorkoutStore } from '@/store/workoutStore';
 import { Workout, WorkoutTemplate } from '@/types/database';
 import { useRouter } from 'expo-router';
+import { Ionicons, Feather, MaterialCommunityIcons } from '@expo/vector-icons';
 
 export default function HomeScreen() {
   const { 
@@ -688,17 +689,24 @@ export default function HomeScreen() {
                         <Text style={styles.workoutDate}>{formatCardDate(workout.start_time)}</Text>
                       </View>
                       {prCount > 0 && (
-                        <View style={styles.prWorkoutBadge}>
-                          <Text style={styles.prWorkoutBadgeText}>🏆 {prCount} PR</Text>
+                        <View style={[styles.prWorkoutBadge, { flexDirection: 'row', alignItems: 'center' }]}>
+                          <Ionicons name="trophy-outline" size={11} color="#FFD60A" style={{ marginRight: 3 }} />
+                          <Text style={styles.prWorkoutBadgeText}>{prCount} PR</Text>
                         </View>
                       )}
                     </View>
 
                     {/* Fila de duración y volumen total */}
                     <View style={styles.cardDurationVolumeRow}>
-                      <Text style={styles.cardMetricLabel}>⏱️ {formatDuration(workout.start_time, workout.end_time)}</Text>
+                      <View style={styles.inlineMetricRow}>
+                        <Ionicons name="time-outline" size={13} color="#8E8E93" />
+                        <Text style={styles.cardMetricLabel}>{formatDuration(workout.start_time, workout.end_time)}</Text>
+                      </View>
                       {volVal > 0 && (
-                        <Text style={styles.cardMetricLabel}>🏋️ {volVal.toLocaleString()} kg</Text>
+                        <View style={styles.inlineMetricRow}>
+                          <MaterialCommunityIcons name="weight" size={13} color="#8E8E93" />
+                          <Text style={styles.cardMetricLabel}>{volVal.toLocaleString()} kg</Text>
+                        </View>
                       )}
                     </View>
 
@@ -706,7 +714,10 @@ export default function HomeScreen() {
                       <View style={styles.cardPillsWrapper}>
                         {workout.blocks.map((block) => (
                           <View key={block.id} style={styles.exerciseTagPill}>
-                            <Text style={styles.exerciseTagText}>💪 {block.exercise?.name}</Text>
+                            <View style={styles.inlineTagRow}>
+                              <MaterialCommunityIcons name="dumbbell" size={12} color="#0082FF" style={{ marginRight: 4 }} />
+                              <Text style={styles.exerciseTagText}>{block.exercise?.name}</Text>
+                            </View>
                           </View>
                         ))}
                       </View>
@@ -1170,6 +1181,15 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: '#8E8E93',
     fontWeight: '600',
+  },
+  inlineMetricRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  inlineTagRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
   },
   cardPillsWrapper: {
     flexDirection: 'row',
