@@ -15,9 +15,11 @@ import {
 import { useWorkoutStore } from '@/store/workoutStore';
 import { TrackingType, Exercise } from '@/types/database';
 import ExerciseInfoModal from '@/components/ExerciseInfoModal';
+import { useRouter } from 'expo-router';
 
 export default function ExploreScreen() {
   const { exercises, loading, fetchExercises, addCustomExercise } = useWorkoutStore();
+  const router = useRouter();
   
   const [search, setSearch] = useState('');
   const [selectedMuscle, setSelectedMuscle] = useState('All');
@@ -93,15 +95,17 @@ export default function ExploreScreen() {
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle="light-content" />
       <View style={styles.header}>
-        <View>
-          <Text style={styles.headerTitle}>Biblioteca</Text>
-          <Text style={styles.headerSubtitle}>Catálogo de Ejercicios</Text>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+          <TouchableOpacity style={styles.backBtn} onPress={() => router.back()}>
+            <Text style={styles.backBtnText}>←</Text>
+          </TouchableOpacity>
+          <View>
+            <Text style={styles.headerTitle}>Biblioteca</Text>
+            <Text style={styles.headerSubtitle}>Catálogo de Ejercicios</Text>
+          </View>
         </View>
-        <TouchableOpacity 
-          style={styles.addButton} 
-          onPress={() => setModalVisible(true)}
-        >
-          <Text style={styles.addButtonText}>+ Crear</Text>
+        <TouchableOpacity style={styles.addButton} onPress={() => setModalVisible(true)}>
+          <Text style={styles.addButtonText}>Crear</Text>
         </TouchableOpacity>
       </View>
 
@@ -589,5 +593,19 @@ const styles = StyleSheet.create({
     color: '#000000',
     fontSize: 16,
     fontWeight: '700',
+  },
+  backBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: '#1C1C1E',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 4,
+  },
+  backBtnText: {
+    color: '#0082FF',
+    fontSize: 20,
+    fontWeight: '800',
   },
 });

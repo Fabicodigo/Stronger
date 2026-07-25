@@ -47,6 +47,8 @@ export interface WorkoutBlock {
   exercise_id: string;
   order: number;
   created_at: string;
+  notes?: string | null;
+  superset_id?: string | null;
 }
 
 // Interfaces específicas de series según su tipo de seguimiento
@@ -56,6 +58,7 @@ export interface BaseSet {
   set_number: number;
   set_type: string; // 'NORMAL' | 'WARMUP' | 'DROP' | 'FAILURE'
   rpe: number | null;
+  completed?: boolean;
   created_at: string;
 }
 
@@ -73,3 +76,19 @@ export interface HeightContactsSet extends BaseSet {
 
 // Unión discriminada de Series (Set) para tipado estricto
 export type WorkoutSet = WeightRepsSet | TimeVariantSet | HeightContactsSet;
+
+// Estructura de Plantillas de entrenamiento (Workout Templates)
+export interface WorkoutTemplate {
+  id: string;
+  name: string;
+  exercises: {
+    exercise_id: string;
+    exercise: Exercise;
+    sets: {
+      set_number: number;
+      set_type: string;
+      metrics: SetMetrics;
+      rpe: number | null;
+    }[];
+  }[];
+}
