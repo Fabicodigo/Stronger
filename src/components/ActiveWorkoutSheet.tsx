@@ -12,7 +12,8 @@ import {
   Platform,
   Dimensions,
   SafeAreaView,
-  StatusBar
+  StatusBar,
+  PanResponder
 } from 'react-native';
 import { useWorkoutStore } from '@/store/workoutStore';
 import { Exercise, TrackingType, WorkoutSet, SetMetrics } from '@/types/database';
@@ -41,6 +42,7 @@ export default function ActiveWorkoutSheet() {
     exerciseUnits,
     exerciseRestDurations,
     setExerciseRestDuration,
+    setExerciseUnit,
     editingWorkoutId,
     workoutsHistory,
     updateBlockNotes,
@@ -100,6 +102,59 @@ export default function ActiveWorkoutSheet() {
   const [selectedSetForRpe, setSelectedSetForRpe] = useState<{ blockId: string; setId: string; currentRpe: number | null } | null>(null);
   const [rpeModalVisible, setRpeModalVisible] = useState(false);
 
+  // Estados para modal de información de columnas (SET, PREVIOUS, KG, REPS, RPE)
+  const [infoSheetVisible, setInfoSheetVisible] = useState(false);
+  const [infoSheetType, setInfoSheetType] = useState<'SET' | 'PREVIOUS' | 'KG' | 'REPS' | 'RPE' | null>(null);
+  const [infoSheetExerciseId, setInfoSheetExerciseId] = useState<string | null>(null);
+
+  const handleHeaderInfoPress = (type: 'SET' | 'PREVIOUS' | 'KG' | 'REPS' | 'RPE', exerciseId?: string) => {
+    setInfoSheetType(type);
+    if (exerciseId) {
+      setInfoSheetExerciseId(exerciseId);
+    } else {
+      setInfoSheetExerciseId(null);
+    }
+    setInfoSheetVisible(true);
+  };
+
+  // Estados para modal de Reloj (Timer y Stopwatch de Cabecera)
+  const [clockModalVisible, setClockModalVisible] = useState(false);
+  const [clockActiveTab, setClockActiveTab] = useState<'timer' | 'stopwatch'>('timer');
+  const [isTimerPaused, setIsTimerPaused] = useState(false);
+  const [configuredRestSeconds, setConfiguredRestSeconds] = useState(60);
+
+  // Estados para cronómetro manual (Stopwatch) en el modal
+  const [stopwatchSeconds, setStopwatchSeconds] = useState(0);
+  const [stopwatchRunning, setStopwatchRunning] = useState(false);
+
+  // Conteo regresivo del cronómetro manual (Stopwatch)
+  useEffect(() => {
+    let interval: any = null;
+    if (stopwatchRunning) {
+      interval = setInterval(() => {
+        setStopwatchSeconds(prev => prev + 1);
+      }, 1000);
+    } else {
+      if (interval) clearInterval(interval);
+    }
+    return () => clearInterval(interval);
+  }, [stopwatchRunning]);
+
+  // Gestos para minimizar la sesión deslizando hacia abajo
+  const panResponder = React.useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => false,
+      onMoveShouldSetPanResponder: (evt, gestureState) => {
+        return gestureState.dy > 15 && Math.abs(gestureState.dx) < 15;
+      },
+      onPanResponderRelease: (evt, gestureState) => {
+        if (gestureState.dy > 100) {
+          setActiveWorkoutExpanded(false);
+        }
+      },
+    })
+  ).current;
+
   // Sincronizar cronómetro con la hora real de inicio (solo si NO estamos editando)
   useEffect(() => {
     if (!activeWorkout) return;
@@ -125,17 +180,22 @@ export default function ActiveWorkoutSheet() {
 
   // Conteo regresivo de descanso
   useEffect(() => {
-    if (restSeconds === null) return;
+    if (restSeconds === null || isTimerPaused) return;
     if (restSeconds <= 0) {
       setRestSeconds(null);
-      Alert.alert('¡Descanso Terminado!', 'Prepárate para la siguiente serie.');
+      showConfirm({
+        title: '¡Descanso Terminado!',
+        message: 'Prepárate para la siguiente serie.',
+        confirmText: 'Entendido',
+        onConfirm: () => {}
+      });
       return;
     }
     const interval = setInterval(() => {
       setRestSeconds((prev) => (prev !== null ? prev - 1 : null));
     }, 1000);
     return () => clearInterval(interval);
-  }, [restSeconds]);
+  }, [restSeconds, isTimerPaused]);
 
   if (!activeWorkout) return null;
 
@@ -552,8 +612,13 @@ export default function ActiveWorkoutSheet() {
         <SafeAreaView style={styles.modalScreenContainer}>
           <StatusBar barStyle="light-content" />
           
+          {/* Barra superior de arrastre para minimizar con gesto */}
+          <View style={styles.topDragIndicatorRow} {...panResponder.panHandlers}>
+            <View style={styles.topDragPill} />
+          </View>
+
           {/* Cabecera del Entrenamiento Activo (Image 1 Style) */}
-          <View style={styles.premiumHeader}>
+          <View style={styles.premiumHeader} {...panResponder.panHandlers}>
             <TouchableOpacity onPress={() => setActiveWorkoutExpanded(false)} style={styles.headerChevronRow}>
               <Text style={styles.headerChevronSymbol}>∨</Text>
               <Text style={styles.headerLogTitle}>
@@ -565,7 +630,7 @@ export default function ActiveWorkoutSheet() {
               <TouchableOpacity 
                 style={styles.headerRoundPauseBtn}
                 onPress={() => {
-                  Alert.alert('Temporizador', 'El cronómetro de la sesión sigue sumando tiempo en la barra inferior.');
+                  setClockModalVisible(true);
                 }}
               >
                 <Ionicons name="stopwatch-outline" size={20} color="#FFFFFF" />
@@ -787,14 +852,29 @@ export default function ActiveWorkoutSheet() {
 
                     {/* Encabezados de Tabla */}
                     <View style={styles.tableHeader}>
-                      <Text style={[styles.colHeader, { width: 35, textAlign: 'center' }]}>SET</Text>
-                      <Text style={[styles.colHeader, { width: 90 }]}>PREVIOUS</Text>
-                      <Text style={[styles.colHeader, { flex: 1, textAlign: 'center' }]}>
-                        {exerciseUnits[block.exercise.id] || 'KG'}
-                      </Text>
-                      <Text style={[styles.colHeader, { flex: 1, textAlign: 'center' }]}>REPS</Text>
-                      <Text style={[styles.colHeader, { width: 45, textAlign: 'center' }]}>RPE</Text>
-                      <Text style={[styles.colHeader, { width: 40, textAlign: 'right' }]}></Text>
+                      <TouchableOpacity onPress={() => handleHeaderInfoPress('SET')} style={{ width: 35 }}>
+                        <Text style={[styles.colHeader, { textAlign: 'center' }]}>SET</Text>
+                      </TouchableOpacity>
+
+                      <TouchableOpacity onPress={() => handleHeaderInfoPress('PREVIOUS')} style={{ width: 90 }}>
+                        <Text style={styles.colHeader}>PREVIOUS</Text>
+                      </TouchableOpacity>
+
+                      <TouchableOpacity onPress={() => handleHeaderInfoPress('KG', block.exercise.id)} style={{ flex: 1 }}>
+                        <Text style={[styles.colHeader, { textAlign: 'center' }]}>
+                          {exerciseUnits[block.exercise.id] || 'KG'}
+                        </Text>
+                      </TouchableOpacity>
+
+                      <TouchableOpacity onPress={() => handleHeaderInfoPress('REPS')} style={{ flex: 1 }}>
+                        <Text style={[styles.colHeader, { textAlign: 'center' }]}>REPS</Text>
+                      </TouchableOpacity>
+
+                      <TouchableOpacity onPress={() => handleHeaderInfoPress('RPE')} style={{ width: 45 }}>
+                        <Text style={[styles.colHeader, { textAlign: 'center' }]}>RPE</Text>
+                      </TouchableOpacity>
+
+                      <View style={{ width: 40 }} />
                     </View>
 
                     {/* Series con Deslizamiento (Swipe to Delete) */}
@@ -960,8 +1040,12 @@ export default function ActiveWorkoutSheet() {
             visible={heatmapModalVisible}
             onRequestClose={() => setHeatmapModalVisible(false)}
           >
-            <View style={styles.popoverOverlay}>
-              <View style={styles.heatmapModalContent}>
+            <TouchableOpacity 
+              style={styles.popoverOverlay} 
+              activeOpacity={1} 
+              onPress={() => setHeatmapModalVisible(false)}
+            >
+              <TouchableOpacity activeOpacity={1} style={styles.heatmapModalContent} onPress={() => {}}>
                 <Text style={styles.heatmapModalTitle}>Muscle Distribution</Text>
                 <Text style={styles.heatmapModalSubtitle}>Visual target summary for this session</Text>
                 
@@ -1005,8 +1089,8 @@ export default function ActiveWorkoutSheet() {
                 <TouchableOpacity style={styles.heatmapCloseBtn} onPress={() => setHeatmapModalVisible(false)}>
                   <Text style={styles.heatmapCloseBtnText}>Cerrar Heatmap</Text>
                 </TouchableOpacity>
-              </View>
-            </View>
+              </TouchableOpacity>
+            </TouchableOpacity>
           </Modal>
 
           {/* MODAL DE MENÚ DE BLOQUE DE EJERCICIO (Reorder, Replace, Superset...) */}
@@ -1027,7 +1111,7 @@ export default function ActiveWorkoutSheet() {
                 setActiveBlockMenuId(null);
               }}
             >
-              <View style={styles.popoverContent}>
+              <TouchableOpacity activeOpacity={1} style={styles.popoverContent} onPress={() => {}}>
                 <Text style={styles.popoverTitle}>Exercise Actions</Text>
                 
                 {/* Reorder Exercises option */}
@@ -1045,7 +1129,7 @@ export default function ActiveWorkoutSheet() {
                           setActiveBlockMenuId(null);
                         }}
                       >
-                        <Ionicons name="arrow-up" size={16} color={blockIdx === 0 ? '#48484A' : '#0082FF'} />
+                        <Feather name="chevron-up" size={16} color={blockIdx === 0 ? '#48484A' : '#FFFFFF'} />
                         <Text style={[styles.reorderText, blockIdx === 0 && { color: '#48484A' }]}>Move Up</Text>
                       </TouchableOpacity>
 
@@ -1058,7 +1142,7 @@ export default function ActiveWorkoutSheet() {
                           setActiveBlockMenuId(null);
                         }}
                       >
-                        <Ionicons name="arrow-down" size={16} color={blockIdx === activeBlocks.length - 1 ? '#48484A' : '#0082FF'} />
+                        <Feather name="chevron-down" size={16} color={blockIdx === activeBlocks.length - 1 ? '#48484A' : '#FFFFFF'} />
                         <Text style={[styles.reorderText, blockIdx === activeBlocks.length - 1 && { color: '#48484A' }]}>Move Down</Text>
                       </TouchableOpacity>
                     </View>
@@ -1069,64 +1153,38 @@ export default function ActiveWorkoutSheet() {
                 <TouchableOpacity 
                   style={styles.typeOptionCard}
                   onPress={() => {
-                    setBlockMenuModalVisible(false);
                     setExerciseModalVisible(true);
                   }}
                 >
-                  <Ionicons name="refresh" size={20} color="#0082FF" />
+                  <Feather name="refresh-cw" size={20} color="#0082FF" />
                   <View style={{ flex: 1 }}>
                     <Text style={styles.typeOptionName}>Replace Exercise</Text>
-                    <Text style={styles.typeOptionDesc}>Swap this exercise keeping the sets layout</Text>
+                    <Text style={styles.typeOptionDesc}>Swap this exercise with another while keeping sets</Text>
                   </View>
                 </TouchableOpacity>
 
-                {/* Superset Option */}
+                {/* Superset Link/Unlink option */}
                 {(() => {
-                  const targetBlock = activeBlocks.find(b => b.id === activeBlockMenuId);
-                  const isSuperset = !!targetBlock?.superset_id;
-                  
+                  if (!activeBlockMenuId) return null;
+                  const blockIdx = activeBlocks.findIndex(b => b.id === activeBlockMenuId);
+                  const block = activeBlocks[blockIdx];
+                  if (!block) return null;
+                  const isSuperset = !!block.superset_id;
                   return (
                     <TouchableOpacity 
                       style={styles.typeOptionCard}
                       onPress={() => {
-                        setBlockMenuModalVisible(false);
-                        if (!activeBlockMenuId) return;
-                        
+                        const partnerBlock = activeBlocks[blockIdx + 1] || activeBlocks[blockIdx - 1];
                         if (isSuperset) {
                           toggleBlockSuperset(activeBlockMenuId, null);
-                          showConfirm({
-                            title: 'Superset eliminado',
-                            message: 'Este ejercicio se ha desvinculado de la superserie.',
-                            confirmText: 'Aceptar',
-                            onConfirm: () => {}
-                          });
-                        } else {
-                          const otherBlocks = activeBlocks.filter(b => b.id !== activeBlockMenuId);
-                          if (otherBlocks.length === 0) {
-                            showConfirm({
-                              title: 'No se puede crear Superset',
-                              message: 'Necesitas al menos 2 ejercicios en tu rutina para crear una superserie.',
-                              confirmText: 'Aceptar',
-                              onConfirm: () => {}
-                            });
-                          } else {
-                            const currentIdx = activeBlocks.findIndex(b => b.id === activeBlockMenuId);
-                            const partnerBlock = activeBlocks[currentIdx + 1] || activeBlocks[currentIdx - 1];
-                            if (partnerBlock) {
-                              toggleBlockSuperset(activeBlockMenuId, partnerBlock.id);
-                              showConfirm({
-                                title: 'Superset creado',
-                                message: `Agrupado con ${partnerBlock.exercise.name}`,
-                                confirmText: 'Aceptar',
-                                onConfirm: () => {}
-                              });
-                            }
-                          }
+                        } else if (partnerBlock) {
+                          toggleBlockSuperset(activeBlockMenuId, partnerBlock.id);
                         }
+                        setBlockMenuModalVisible(false);
                         setActiveBlockMenuId(null);
                       }}
                     >
-                      <Feather name="link" size={20} color="#0082FF" />
+                      <Feather name="link" size={20} color={isSuperset ? '#FF453A' : '#30D158'} />
                       <View style={{ flex: 1 }}>
                         <Text style={styles.typeOptionName}>
                           {isSuperset ? 'Remove from Superset' : 'Add to Superset'}
@@ -1166,7 +1224,152 @@ export default function ActiveWorkoutSheet() {
                 >
                   <Text style={styles.cancelPopoverText}>Cancel</Text>
                 </TouchableOpacity>
-              </View>
+              </TouchableOpacity>
+            </TouchableOpacity>
+          </Modal>
+
+          {/* MODAL: RELOJ (Timer y Stopwatch de Cabecera) */}
+          <Modal
+            animationType="slide"
+            transparent={true}
+            visible={clockModalVisible}
+            onRequestClose={() => setClockModalVisible(false)}
+          >
+            <TouchableOpacity 
+              style={styles.popoverOverlay} 
+              activeOpacity={1} 
+              onPress={() => setClockModalVisible(false)}
+            >
+              <TouchableOpacity activeOpacity={1} style={styles.clockModalContent} onPress={() => {}}>
+                <View style={styles.clockHeader}>
+                  <View style={{ width: 24 }} />
+                  <Text style={styles.clockHeaderTitle}>Clock</Text>
+                  <TouchableOpacity onPress={() => Alert.alert('Configuración', 'Las alertas de descanso y cronómetro están activadas por defecto.')}>
+                    <Ionicons name="settings-outline" size={20} color="#FFFFFF" />
+                  </TouchableOpacity>
+                </View>
+
+                {/* Selector de Pestañas (Timer / Stopwatch) */}
+                <View style={styles.clockTabsContainer}>
+                  <TouchableOpacity 
+                    style={[styles.clockTabPill, clockActiveTab === 'timer' && styles.clockTabPillActive]}
+                    onPress={() => setClockActiveTab('timer')}
+                  >
+                    <Text style={[styles.clockTabPillText, clockActiveTab === 'timer' && styles.clockTabPillTextActive]}>
+                      Timer
+                    </Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity 
+                    style={[styles.clockTabPill, clockActiveTab === 'stopwatch' && styles.clockTabPillActive]}
+                    onPress={() => setClockActiveTab('stopwatch')}
+                  >
+                    <Text style={[styles.clockTabPillText, clockActiveTab === 'stopwatch' && styles.clockTabPillTextActive]}>
+                      Stopwatch
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+
+                {/* CONTENIDO DE PESTAÑA: TIMER */}
+                {clockActiveTab === 'timer' && (
+                  <View style={styles.clockTabContent}>
+                    {/* Círculo de Cuenta Regresiva */}
+                    <View style={styles.timerCircle}>
+                      <Text style={styles.timerCircleText}>
+                        {restSeconds !== null ? formatTime(restSeconds) : formatTime(configuredRestSeconds)}
+                      </Text>
+                    </View>
+
+                    {/* Botones de Ajuste de Tiempo */}
+                    <View style={styles.timerAdjustRow}>
+                      <TouchableOpacity 
+                        style={styles.timerAdjustBtn}
+                        onPress={() => {
+                          if (restSeconds !== null) {
+                            setRestSeconds(prev => prev !== null ? Math.max(0, prev - 15) : null);
+                          } else {
+                            setConfiguredRestSeconds(prev => Math.max(15, prev - 15));
+                          }
+                        }}
+                      >
+                        <Text style={styles.timerAdjustText}>-15s</Text>
+                      </TouchableOpacity>
+
+                      <TouchableOpacity 
+                        style={styles.timerAdjustBtn}
+                        onPress={() => {
+                          if (restSeconds !== null) {
+                            setRestSeconds(prev => prev !== null ? prev + 15 : null);
+                          } else {
+                            setConfiguredRestSeconds(prev => prev + 15);
+                          }
+                        }}
+                      >
+                        <Text style={styles.timerAdjustText}>+15s</Text>
+                      </TouchableOpacity>
+                    </View>
+
+                    {/* Botón Principal (Start / Pause / Resume) */}
+                    <TouchableOpacity 
+                      style={styles.timerStartBtn}
+                      onPress={() => {
+                        if (restSeconds !== null) {
+                          setIsTimerPaused(!isTimerPaused);
+                        } else {
+                          setRestSeconds(configuredRestSeconds);
+                          setIsTimerPaused(false);
+                        }
+                      }}
+                    >
+                      <Text style={styles.timerStartText}>
+                        {restSeconds === null 
+                          ? 'Start' 
+                          : isTimerPaused 
+                            ? 'Resume' 
+                            : 'Pause'}
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
+                )}
+
+                {/* CONTENIDO DE PESTAÑA: STOPWATCH */}
+                {clockActiveTab === 'stopwatch' && (
+                  <View style={styles.clockTabContent}>
+                    {/* Círculo de Cronómetro */}
+                    <View style={[styles.timerCircle, { borderColor: '#3A3A3C' }]}>
+                      <Text style={styles.timerCircleText}>{formatTime(stopwatchSeconds)}</Text>
+                    </View>
+
+                    <View style={styles.stopwatchControlsRow}>
+                      <TouchableOpacity 
+                        style={styles.stopwatchResetBtn}
+                        onPress={() => {
+                          setStopwatchRunning(false);
+                          setStopwatchSeconds(0);
+                        }}
+                      >
+                        <Text style={styles.stopwatchResetText}>Reset</Text>
+                      </TouchableOpacity>
+
+                      <TouchableOpacity 
+                        style={styles.stopwatchStartBtn}
+                        onPress={() => setStopwatchRunning(!stopwatchRunning)}
+                      >
+                        <Text style={styles.stopwatchStartText}>
+                          {stopwatchRunning ? 'Pause' : 'Start'}
+                        </Text>
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                )}
+
+                <TouchableOpacity 
+                  style={styles.clockModalCloseBtn}
+                  onPress={() => setClockModalVisible(false)}
+                >
+                  <Text style={styles.clockModalCloseText}>Close</Text>
+                </TouchableOpacity>
+              </TouchableOpacity>
             </TouchableOpacity>
           </Modal>
 
@@ -1213,6 +1416,117 @@ export default function ActiveWorkoutSheet() {
             </View>
           </Modal>
 
+          {/* MODAL: INFORMACIÓN DE COLUMNA (Bottom Sheet) */}
+          <Modal
+            animationType="slide"
+            transparent={true}
+            visible={infoSheetVisible}
+            onRequestClose={() => {
+              setInfoSheetVisible(false);
+              setInfoSheetType(null);
+              setInfoSheetExerciseId(null);
+            }}
+          >
+            <TouchableOpacity 
+              style={styles.popoverOverlay} 
+              activeOpacity={1} 
+              onPress={() => {
+                setInfoSheetVisible(false);
+                setInfoSheetType(null);
+                setInfoSheetExerciseId(null);
+              }}
+            >
+              <View style={styles.bottomSheetInfo}>
+                {/* Drag handle line on top */}
+                <View style={styles.bottomSheetDragHandle} />
+
+                {(() => {
+                  if (infoSheetType === 'SET') {
+                    return (
+                      <View style={styles.infoSheetContent}>
+                        <Text style={styles.infoSheetTitle}>Sets</Text>
+                        <Text style={styles.infoSheetMessage}>
+                          Sets are used to indicate in which cycle of the exercise you are in. The options are: warm up, normal, failure and drop set.
+                        </Text>
+                      </View>
+                    );
+                  }
+                  if (infoSheetType === 'PREVIOUS') {
+                    return (
+                      <View style={styles.infoSheetContent}>
+                        <Text style={styles.infoSheetTitle}>Previous</Text>
+                        <Text style={styles.infoSheetMessage}>
+                          In the "Previous" column, you will find your past performance of that exercise on that specific set.
+                        </Text>
+                      </View>
+                    );
+                  }
+                  if (infoSheetType === 'KG') {
+                    const currentUnit = infoSheetExerciseId ? (exerciseUnits[infoSheetExerciseId] || 'Kg') : 'Kg';
+                    return (
+                      <View style={styles.infoSheetContent}>
+                        <Text style={styles.infoSheetTitle}>Weight Input</Text>
+                        <Text style={styles.infoSheetMessage}>
+                          We recommend inputting the total combined weight lifted in one rep of the exercise. For barbell exercises, input the weight of the bar plus all the plates.
+                        </Text>
+
+                        {infoSheetExerciseId && (
+                          <TouchableOpacity 
+                            style={styles.infoSheetUnitRow}
+                            onPress={() => {
+                              const nextUnit = currentUnit.toLowerCase() === 'kg' ? 'Lb' : 'Kg';
+                              setExerciseUnit(infoSheetExerciseId, nextUnit);
+                            }}
+                          >
+                            <Text style={styles.infoSheetUnitLabel}>Weight Unit</Text>
+                            <View style={styles.infoSheetUnitValueContainer}>
+                              <Text style={styles.infoSheetUnitValue}>
+                                {currentUnit.toLowerCase() === 'kg' ? 'Default (kg)' : 'Default (lbs)'}
+                              </Text>
+                              <Text style={styles.infoSheetUnitChevron}>❯</Text>
+                            </View>
+                          </TouchableOpacity>
+                        )}
+                      </View>
+                    );
+                  }
+                  if (infoSheetType === 'REPS') {
+                    return (
+                      <View style={styles.infoSheetContent}>
+                        <Text style={styles.infoSheetTitle}>Repetitions</Text>
+                        <Text style={styles.infoSheetMessage}>
+                          Repetitions indicate how many times you performed that exercise per set. You should only log completed reps.
+                        </Text>
+                      </View>
+                    );
+                  }
+                  if (infoSheetType === 'RPE') {
+                    return (
+                      <View style={styles.infoSheetContent}>
+                        <Text style={styles.infoSheetTitle}>Rate of Perceived Exertion (RPE)</Text>
+                        <Text style={styles.infoSheetMessage}>
+                          RPE is a subjective 6–10 scale used to measure how hard your body is working during exercise.
+                        </Text>
+                      </View>
+                    );
+                  }
+                  return null;
+                })()}
+
+                <TouchableOpacity 
+                  style={styles.infoSheetGotItBtn}
+                  onPress={() => {
+                    setInfoSheetVisible(false);
+                    setInfoSheetType(null);
+                    setInfoSheetExerciseId(null);
+                  }}
+                >
+                  <Text style={styles.infoSheetGotItText}>Got it!</Text>
+                </TouchableOpacity>
+              </View>
+            </TouchableOpacity>
+          </Modal>
+
           {/* MODAL: CONFIGURAR TIEMPO DE DESCANSO (Rest Modal) */}
           <Modal
             animationType="fade"
@@ -1220,8 +1534,15 @@ export default function ActiveWorkoutSheet() {
             visible={restModalVisible}
             onRequestClose={() => setRestModalVisible(false)}
           >
-            <View style={styles.popoverOverlay}>
-              <View style={styles.popoverContent}>
+            <TouchableOpacity 
+              style={styles.popoverOverlay} 
+              activeOpacity={1} 
+              onPress={() => {
+                setRestModalVisible(false);
+                setRestingExerciseId(null);
+              }}
+            >
+              <TouchableOpacity activeOpacity={1} style={styles.popoverContent} onPress={() => {}}>
                 <Text style={styles.popoverTitle}>Rest Timer Settings</Text>
                 <Text style={styles.rpeSubtitle}>Elige el tiempo de descanso predeterminado</Text>
 
@@ -1285,8 +1606,8 @@ export default function ActiveWorkoutSheet() {
                 >
                   <Text style={styles.cancelPopoverText}>Confirmar</Text>
                 </TouchableOpacity>
-              </View>
-            </View>
+              </TouchableOpacity>
+            </TouchableOpacity>
           </Modal>
 
           {/* Visor de Detalles e Historial de Ejercicio */}
@@ -1306,8 +1627,12 @@ export default function ActiveWorkoutSheet() {
             visible={typeModalVisible}
             onRequestClose={() => setTypeModalVisible(false)}
           >
-            <View style={styles.popoverOverlay}>
-              <View style={styles.popoverContent}>
+            <TouchableOpacity 
+              style={styles.popoverOverlay} 
+              activeOpacity={1} 
+              onPress={() => setTypeModalVisible(false)}
+            >
+              <TouchableOpacity activeOpacity={1} style={styles.popoverContent} onPress={() => {}}>
                 <Text style={styles.popoverTitle}>Seleccionar Tipo de Serie</Text>
                 
                 <TouchableOpacity style={styles.typeOptionCard} onPress={() => handleTypeSelect('NORMAL')}>
@@ -1345,8 +1670,8 @@ export default function ActiveWorkoutSheet() {
                 <TouchableOpacity style={styles.cancelPopoverBtn} onPress={() => setTypeModalVisible(false)}>
                   <Text style={styles.cancelPopoverText}>Cancelar</Text>
                 </TouchableOpacity>
-              </View>
-            </View>
+              </TouchableOpacity>
+            </TouchableOpacity>
           </Modal>
 
           {/* MODAL: SELECTOR DE RPE */}
@@ -1356,8 +1681,12 @@ export default function ActiveWorkoutSheet() {
             visible={rpeModalVisible}
             onRequestClose={() => setRpeModalVisible(false)}
           >
-            <View style={styles.popoverOverlay}>
-              <View style={styles.bottomSheetRpe}>
+            <TouchableOpacity 
+              style={styles.popoverOverlay} 
+              activeOpacity={1} 
+              onPress={() => setRpeModalVisible(false)}
+            >
+              <TouchableOpacity activeOpacity={1} style={styles.bottomSheetRpe} onPress={() => {}}>
                 <Text style={styles.popoverTitle}>Seleccionar Esfuerzo Percibido (RPE)</Text>
                 <Text style={styles.rpeSubtitle}>Califica el nivel de esfuerzo entre 1 y 10</Text>
                 
@@ -1390,8 +1719,8 @@ export default function ActiveWorkoutSheet() {
                     <Text style={styles.rpeCloseBtnText}>Cerrar</Text>
                   </TouchableOpacity>
                 </View>
-              </View>
-            </View>
+              </TouchableOpacity>
+            </TouchableOpacity>
           </Modal>
 
           {/* Modal de selección de ejercicios */}
@@ -1401,8 +1730,12 @@ export default function ActiveWorkoutSheet() {
             visible={exerciseModalVisible}
             onRequestClose={() => setExerciseModalVisible(false)}
           >
-            <View style={styles.modalOverlay}>
-              <View style={styles.catalogModalContent}>
+            <TouchableOpacity 
+              style={styles.modalOverlay} 
+              activeOpacity={1} 
+              onPress={() => setExerciseModalVisible(false)}
+            >
+              <TouchableOpacity activeOpacity={1} style={styles.catalogModalContent} onPress={() => {}}>
                 <View style={styles.modalHeader}>
                   <Text style={styles.modalTitle}>Ejercicios de la Biblioteca</Text>
                   <TouchableOpacity onPress={() => setExerciseModalVisible(false)}>
@@ -1452,8 +1785,8 @@ export default function ActiveWorkoutSheet() {
                     )}
                   </ScrollView>
                 )}
-              </View>
-            </View>
+              </TouchableOpacity>
+            </TouchableOpacity>
           </Modal>
         </SafeAreaView>
       </Modal>
@@ -2708,5 +3041,241 @@ const styles = StyleSheet.create({
     color: '#0082FF',
     fontSize: 13,
     fontWeight: '700',
+  },
+  // Info sheet styles
+  bottomSheetInfo: {
+    backgroundColor: '#1C1C1E',
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    padding: 24,
+    width: '100%',
+    position: 'absolute',
+    bottom: 0,
+    alignItems: 'center',
+    gap: 16,
+  },
+  bottomSheetDragHandle: {
+    width: 36,
+    height: 5,
+    borderRadius: 2.5,
+    backgroundColor: '#48484A',
+    marginBottom: 8,
+  },
+  infoSheetContent: {
+    width: '100%',
+    alignItems: 'center',
+    gap: 12,
+  },
+  infoSheetTitle: {
+    fontSize: 16,
+    fontWeight: '900',
+    color: '#FFFFFF',
+    textAlign: 'center',
+  },
+  infoSheetMessage: {
+    fontSize: 14,
+    color: '#E5E5EA',
+    textAlign: 'center',
+    lineHeight: 20,
+    paddingHorizontal: 8,
+  },
+  infoSheetUnitRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    width: '100%',
+    backgroundColor: '#0C0C0E',
+    borderRadius: 14,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    marginTop: 8,
+  },
+  infoSheetUnitLabel: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  infoSheetUnitValueContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  infoSheetUnitValue: {
+    color: '#8E8E93',
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  infoSheetUnitChevron: {
+    color: '#48484A',
+    fontSize: 12,
+  },
+  infoSheetGotItBtn: {
+    backgroundColor: '#0082FF',
+    width: '100%',
+    height: 48,
+    borderRadius: 14,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginTop: 8,
+  },
+  infoSheetGotItText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '800',
+  },
+  // Clock Modal (Timer & Stopwatch)
+  clockModalContent: {
+    backgroundColor: '#1C1C1E',
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    padding: 24,
+    width: '100%',
+    position: 'absolute',
+    bottom: 0,
+    gap: 20,
+    alignItems: 'center',
+  },
+  clockHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    width: '100%',
+  },
+  clockHeaderTitle: {
+    fontSize: 16,
+    fontWeight: '900',
+    color: '#FFFFFF',
+    textAlign: 'center',
+  },
+  clockTabsContainer: {
+    flexDirection: 'row',
+    backgroundColor: '#0C0C0E',
+    borderRadius: 14,
+    padding: 4,
+    width: '100%',
+    gap: 4,
+  },
+  clockTabPill: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  clockTabPillActive: {
+    backgroundColor: '#0082FF',
+  },
+  clockTabPillText: {
+    fontSize: 14,
+    color: '#8E8E93',
+    fontWeight: '700',
+  },
+  clockTabPillTextActive: {
+    color: '#FFFFFF',
+    fontWeight: '800',
+  },
+  clockTabContent: {
+    width: '100%',
+    alignItems: 'center',
+    gap: 24,
+    marginVertical: 10,
+  },
+  timerCircle: {
+    width: 180,
+    height: 180,
+    borderRadius: 90,
+    borderWidth: 4,
+    borderColor: '#0082FF',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  timerCircleText: {
+    fontSize: 36,
+    fontWeight: '900',
+    color: '#FFFFFF',
+  },
+  timerAdjustRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    width: '100%',
+    paddingHorizontal: 20,
+  },
+  timerAdjustBtn: {
+    paddingVertical: 10,
+    paddingHorizontal: 20,
+  },
+  timerAdjustText: {
+    fontSize: 15,
+    fontWeight: '800',
+    color: '#0082FF',
+  },
+  timerStartBtn: {
+    backgroundColor: '#0082FF',
+    width: '100%',
+    height: 48,
+    borderRadius: 14,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  timerStartText: {
+    color: '#FFFFFF',
+    fontSize: 15,
+    fontWeight: '800',
+  },
+  stopwatchControlsRow: {
+    flexDirection: 'row',
+    gap: 12,
+    width: '100%',
+  },
+  stopwatchResetBtn: {
+    flex: 1,
+    height: 48,
+    borderRadius: 14,
+    backgroundColor: '#121214',
+    borderWidth: 0.5,
+    borderColor: '#1C1C1E',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  stopwatchResetText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  stopwatchStartBtn: {
+    flex: 1,
+    height: 48,
+    borderRadius: 14,
+    backgroundColor: '#0082FF',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  stopwatchStartText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '800',
+  },
+  clockModalCloseBtn: {
+    width: '100%',
+    alignItems: 'center',
+    paddingVertical: 12,
+  },
+  clockModalCloseText: {
+    color: '#8E8E93',
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  topDragIndicatorRow: {
+    width: '100%',
+    height: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#000000',
+  },
+  topDragPill: {
+    width: 36,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: '#48484A',
   },
 });
